@@ -30,11 +30,11 @@
 *.exe
 *.out
 *.app
-
+*.zip
 
 build/
 cmake-build-*/
 .idea/
 .vscode/
 tests/
-pixels-tpch-1.zip
+pixels/
