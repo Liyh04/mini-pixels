@@ -35,12 +35,17 @@ void TimestampColumnVector::close() {
 }
 
 void TimestampColumnVector::add(std::string &value) {
+
+    std::cout << "Original input timestamp string: \"" << value << "\"" << std::endl;
+
     // 移除字符串两端的空格
     value.erase(0, value.find_first_not_of(" \t\n\r"));
     value.erase(value.find_last_not_of(" \t\n\r") + 1);
+    std::cout << "Trimmed timestamp string: \"" << value << "\"" << std::endl;
 
     // 验证输入格式
     if (value.empty()) {
+        std::cerr << "Error: Timestamp string is empty." << std::endl;
         throw std::invalid_argument("Timestamp string is empty.");
     }
 
@@ -49,18 +54,30 @@ void TimestampColumnVector::add(std::string &value) {
     ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
 
     if (ss.fail()) {
+        std::cerr << "Error: Invalid timestamp format: \"" << value << "\"" << std::endl;
         throw std::invalid_argument("Invalid timestamp format: " + value);
     }
 
     // 转换为 Unix 时间戳（秒）
     std::time_t ts = std::mktime(&tm);
     if (ts == -1) {
+        std::cerr << "Error: Failed to convert timestamp: \"" << value << "\"" << std::endl;
         throw std::runtime_error("Failed to convert timestamp: " + value);
     }
 
+    std::cout << "Parsed Unix timestamp (seconds): " << ts << std::endl;
+
+    // 将秒转换为微秒
+    int64_t microseconds = static_cast<int64_t>(ts) * 1000000;
+    std::cout << "Converted Unix timestamp (microseconds): " << microseconds << std::endl;
+
     // 添加到时间列中
-    add(static_cast<int64_t>(ts));
+    add(microseconds);
+    std::cout << "Timestamp successfully added to the column vector: " << microseconds << std::endl;
+
+
 }
+
 
 void TimestampColumnVector::add(bool value) {
     // 将布尔值视为时间戳：false 对应 0 秒，true 对应 1 秒

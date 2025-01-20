@@ -138,7 +138,7 @@ bool TimestampColumnWriter::decideNullsPadding(std::shared_ptr<PixelsWriterOptio
     return writerOption->isNullsPadding();
 }
 
-pixels::proto::ColumnEncoding TimestampColumnWriter::getColumnChunkEncoding() const
+pixels::proto::ColumnEncoding TimestampColumnWriter::getColumnChunkEncoding()
 {
     pixels::proto::ColumnEncoding columnEncoding;
     if (runlengthEncoding)

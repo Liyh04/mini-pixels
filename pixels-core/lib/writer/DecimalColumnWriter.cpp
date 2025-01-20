@@ -25,10 +25,57 @@ ColumnWriter(type, writerOption)
 
 int DecimalColumnWriter::write(std::shared_ptr<ColumnVector> vector, int length)
 {
-    return 0;
+    std::cout<<"In DecimalColumnWriter"<<std::endl;
+    auto columnVector = std::static_pointer_cast<DecimalColumnVector>(vector);
+    if (!columnVector)
+    {
+        throw std::invalid_argument("Invalid vector type");
+    }
+    long* values;
+    values=columnVector->vector;
+
+    std::shared_ptr<ByteBuffer> curVecPartitionBuffer;
+    EncodingUtils encodingUtils;
+    
+
+    for (int i = 0; i < length; i++){
+            isNull[curPixelIsNullIndex++] = vector->isNull[i];
+            curPixelEleIndex++;
+
+            curVecPartitionBuffer = std::make_shared<ByteBuffer>(sizeof(long));
+            if (vector->isNull[i])
+            {
+                hasNull = true;
+                if (nullsPadding)
+                {
+                    encodingUtils.writeLongLE(curVecPartitionBuffer, 0L);
+                }
+            }
+            else
+            {
+                if (byteOrder == ByteOrder::PIXELS_LITTLE_ENDIAN)
+                {
+                    encodingUtils.writeLongLE(curVecPartitionBuffer, values[i]);
+                }
+                else
+                {
+                    encodingUtils.writeLongBE(curVecPartitionBuffer, values[i]);
+                }
+            }
+            
+            outputStream->putBytes(curVecPartitionBuffer->getPointer(), curVecPartitionBuffer->getWritePos());
+
+            // if current pixel size satisfies the pixel stride, end the current pixel and start a new one
+            if (curPixelEleIndex >= pixelStride)
+            {
+                ColumnWriter::newPixel();
+            }
+    }
+    return outputStream->getWritePos();
 }
 
 bool DecimalColumnWriter::decideNullsPadding(std::shared_ptr<PixelsWriterOption> writerOption)
 {
+    return writerOption->isNullsPadding();
     return false;
 }

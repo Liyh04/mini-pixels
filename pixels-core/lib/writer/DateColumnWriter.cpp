@@ -1,5 +1,3 @@
-#include "writer/DateColumnWriter.h"
-#include "DateColumnWriter.h"
 /*
  * Copyright 2024 PixelsDB.
  *
@@ -19,35 +17,79 @@
  * License along with Pixels.  If not, see
  * <https://www.gnu.org/licenses/>.
  */
+
+ /*
+ * Copyright 2024 PixelsDB.
+ *
+ * This file is part of Pixels.
+ *
+ * Pixels is free software: you can redistribute it and/or modify
+ * it under the terms of the Affero GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Pixels is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * Affero GNU General Public License for more details.
+ *
+ * You should have received a copy of the Affero GNU General Public
+ * License along with Pixels.  If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
+
+ /*
+ * Copyright 2024 PixelsDB.
+ *
+ * This file is part of Pixels.
+ *
+ * Pixels is free software: you can redistribute it and/or modify
+ * it under the terms of the Affero GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Pixels is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * Affero GNU General Public License for more details.
+ *
+ * You should have received a copy of the Affero GNU General Public
+ * License along with Pixels.  If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
+
 #include "writer/DateColumnWriter.h"
-#include "utils/EncodingUtils.h"
 #include "utils/BitUtils.h"
 
-DateColumnWriter::DateColumnWriter(std::shared_ptr<TypeDescription> type, std::shared_ptr<PixelsWriterOption> writerOption)
-    : ColumnWriter(type, writerOption), curPixelVector(pixelStride)
+DateColumnWriter::DateColumnWriter(std::shared_ptr<TypeDescription> type, std::shared_ptr<PixelsWriterOption> writerOption) :
+ColumnWriter(type, writerOption), curPixelVector(pixelStride)
 {
-    runlengthEncoding = writerOption->getEncodingLevel().ge(EncodingLevel::Level::EL2);
+    //isLong = type->getCategory() == TypeDescription::Category::LONG;
+    runlengthEncoding = encodingLevel.ge(EncodingLevel::Level::EL2);
     if (runlengthEncoding)
     {
-        encoder = std::make_unique<RunLenIntEncoder>();
+        encoder = std::make_unique<RunLenIntEncoder>(true,true);
     }
 }
 
 int DateColumnWriter::write(std::shared_ptr<ColumnVector> vector, int size)
 {
-    std::cout << "In DateColumnWriter::write, size = " << size << std::endl;
-
+    std::cout<<"In DateColumnWriter"<<std::endl;
     auto columnVector = std::static_pointer_cast<DateColumnVector>(vector);
     if (!columnVector)
     {
         throw std::invalid_argument("Invalid vector type");
     }
+    int* values;
+    values=columnVector->dates;
 
-    int* values = columnVector->dates; // 日期数据存储为 int，表示从基准日期的天数偏移
-    int curPartLength;
-    int curPartOffset = 0;
-    int nextPartLength = size;
 
+    int curPartLength;         // size of the partition which belongs to current pixel
+    int curPartOffset = 0;     // starting offset of the partition which belongs to current pixel
+    int nextPartLength = size; // size of the partition which belongs to next pixel
+
+    // do the calculation to partition the vector into current pixel and next one
+    // doing this pre-calculation to eliminate branch prediction inside the for loop
     while ((curPixelIsNullIndex + nextPartLength) >= pixelStride)
     {
         curPartLength = pixelStride - curPixelIsNullIndex;
@@ -71,43 +113,7 @@ void DateColumnWriter::close()
     }
     ColumnWriter::close();
 }
-
-void DateColumnWriter::newPixel()
-{
-    if (runlengthEncoding)
-    {
-        std::vector<byte> buffer(curPixelVectorIndex * sizeof(int));
-        int resLen;
-        encoder->encode(curPixelVector.data(), buffer.data(), curPixelVectorIndex, resLen);
-        outputStream->putBytes(buffer.data(), resLen);
-    }
-    else
-    {
-        std::shared_ptr<ByteBuffer> curVecPartitionBuffer = std::make_shared<ByteBuffer>(curPixelVectorIndex * sizeof(int));
-        EncodingUtils encodingUtils;
-
-        if (byteOrder == ByteOrder::PIXELS_LITTLE_ENDIAN)
-        {
-            for (int i = 0; i < curPixelVectorIndex; i++)
-            {
-                encodingUtils.writeIntLE(curVecPartitionBuffer, curPixelVector[i]);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < curPixelVectorIndex; i++)
-            {
-                encodingUtils.writeIntBE(curVecPartitionBuffer, curPixelVector[i]);
-            }
-        }
-
-        outputStream->putBytes(curVecPartitionBuffer->getPointer(), curVecPartitionBuffer->getWritePos());
-    }
-
-    ColumnWriter::newPixel();
-}
-
-void DateColumnWriter::writeCurPartTime(std::shared_ptr<ColumnVector> columnVector, int* values, int curPartLength, int curPartOffset)
+void DateColumnWriter::writeCurPartTime(std::shared_ptr<ColumnVector> columnVector, int *values, int curPartLength, int curPartOffset)
 {
     for (int i = 0; i < curPartLength; i++)
     {
@@ -130,7 +136,6 @@ void DateColumnWriter::writeCurPartTime(std::shared_ptr<ColumnVector> columnVect
     curPixelIsNullIndex += curPartLength;
 }
 
-
 bool DateColumnWriter::decideNullsPadding(std::shared_ptr<PixelsWriterOption> writerOption)
 {
     if (writerOption->getEncodingLevel().ge(EncodingLevel::Level::EL2))
@@ -140,16 +145,52 @@ bool DateColumnWriter::decideNullsPadding(std::shared_ptr<PixelsWriterOption> wr
     return writerOption->isNullsPadding();
 }
 
-pixels::proto::ColumnEncoding DateColumnWriter::getColumnChunkEncoding() const
+void DateColumnWriter::newPixel()
+{
+    // write out current pixel vector
+    if (runlengthEncoding)
+    {
+        std::vector<byte> buffer(curPixelVectorIndex * sizeof(int));
+        int resLen;
+        encoder->encode(curPixelVector.data(), buffer.data(), curPixelVectorIndex, resLen);
+        outputStream->putBytes(buffer.data(), resLen);
+    }
+    else
+    {
+        std::shared_ptr<ByteBuffer> curVecPartitionBuffer;
+        EncodingUtils encodingUtils;
+        curVecPartitionBuffer = std::make_shared<ByteBuffer>(curPixelVectorIndex * sizeof(int));
+        if (byteOrder == ByteOrder::PIXELS_LITTLE_ENDIAN)
+        {
+            for (int i = 0; i < curPixelVectorIndex; i++)
+            {
+                encodingUtils.writeIntLE(curVecPartitionBuffer, (int)curPixelVector[i]);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < curPixelVectorIndex; i++)
+            {
+                encodingUtils.writeIntBE(curVecPartitionBuffer, (int)curPixelVector[i]);
+            }
+        }
+        
+        outputStream->putBytes(curVecPartitionBuffer->getPointer(), curVecPartitionBuffer->getWritePos());
+    }
+
+    ColumnWriter::newPixel();
+}
+
+pixels::proto::ColumnEncoding DateColumnWriter::getColumnChunkEncoding()
 {
     pixels::proto::ColumnEncoding columnEncoding;
     if (runlengthEncoding)
     {
-        columnEncoding.set_kind(pixels::proto::ColumnEncoding_Kind_RUNLENGTH);
+        columnEncoding.set_kind(pixels::proto::ColumnEncoding::Kind::ColumnEncoding_Kind_RUNLENGTH);
     }
     else
     {
-        columnEncoding.set_kind(pixels::proto::ColumnEncoding_Kind_NONE);
+        columnEncoding.set_kind(pixels::proto::ColumnEncoding::Kind::ColumnEncoding_Kind_NONE);
     }
     return columnEncoding;
 }
