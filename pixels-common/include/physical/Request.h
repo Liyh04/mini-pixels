@@ -6,7 +6,7 @@
 #define PIXELS_REQUEST_H
 
 #include <iostream>
-
+#include <cstdint>
 class Request {
 public:
     int64_t bufferId;

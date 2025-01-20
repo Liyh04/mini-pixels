@@ -1,3 +1,4 @@
+#include "writer/DecimalColumnWriter.h"
 /*
  * Copyright 2024 PixelsDB.
  *
@@ -17,3 +18,17 @@
  * License along with Pixels.  If not, see
  * <https://www.gnu.org/licenses/>.
  */
+DecimalColumnWriter::DecimalColumnWriter(std::shared_ptr<TypeDescription> type, std::shared_ptr<PixelsWriterOption> writerOption):
+ColumnWriter(type, writerOption)
+{
+}
+
+int DecimalColumnWriter::write(std::shared_ptr<ColumnVector> vector, int length)
+{
+    return 0;
+}
+
+bool DecimalColumnWriter::decideNullsPadding(std::shared_ptr<PixelsWriterOption> writerOption)
+{
+    return false;
+}

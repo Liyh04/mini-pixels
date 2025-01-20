@@ -57,47 +57,79 @@ PixelsWriterImpl::PixelsWriterImpl(std::shared_ptr<TypeDescription> schema, int 
 }
 
 bool PixelsWriterImpl::addRowBatch(std::shared_ptr<VectorizedRowBatch> rowBatch) {
-    std::cout << "PixelsWriterImpl::addRowBatch" << std::endl;
-    curRowGroupDataLength=0;
-    curRowGroupNumOfRows+=rowBatch->count();
-    writeColumnVectors(rowBatch->cols,rowBatch->count());
+    std::cout << "Entering PixelsWriterImpl::addRowBatch" << std::endl;
 
-    if(curRowGroupDataLength>=rowGroupSize){
+    // 打印当前处理的 rowBatch 信息
+    std::cout << "RowBatch count: " << rowBatch->count() << std::endl;
+
+    curRowGroupDataLength = 0;
+    curRowGroupNumOfRows += rowBatch->count();
+
+    // 打印当前的 rowGroup 的长度和行数
+    std::cout << "Current RowGroup Data Length: " << curRowGroupDataLength << std::endl;
+    std::cout << "Current RowGroup Number of Rows: " << curRowGroupNumOfRows << std::endl;
+
+    writeColumnVectors(rowBatch->cols, rowBatch->count());
+
+    // 打印写入后的数据长度
+    std::cout << "After writeColumnVectors, curRowGroupDataLength: " << curRowGroupDataLength << std::endl;
+
+    if (curRowGroupDataLength >= rowGroupSize) {
+        std::cout << "Row group size exceeded. Writing row group..." << std::endl;
         writeRowGroup();
-        curRowGroupNumOfRows=0L;
+
+        // 重置计数器并输出
+        curRowGroupNumOfRows = 0L;
+        std::cout << "Row group written. Resetting curRowGroupNumOfRows to " << curRowGroupNumOfRows << std::endl;
+
         return false;
     }
+
+    std::cout << "Row group size not exceeded. Continuing..." << std::endl;
     return true;
 }
+
 
 void PixelsWriterImpl::writeColumnVectors(std::vector<std::shared_ptr<ColumnVector>>& columnVectors, int rowBatchSize)
 {
     std::vector<std::future<void>> futures;
     std::atomic<int> dataLength(0);
-    int commonColumnLength = columnVectors.size() ;
+    int commonColumnLength = columnVectors.size();
+
+    // 打印列数和行批次大小
+    std::cout << "Writing columns. Total columns: " << commonColumnLength << ", Row batch size: " << rowBatchSize << std::endl;
 
     // Writing regular columns
     for (int i = 0; i < commonColumnLength; ++i) {
-       // dataLength += columnWriters[i]->write(columnVectors[i], rowBatchSize);
-       futures.emplace_back(std::async(std::launch::async, [this, columnVectors, rowBatchSize, i, &dataLength]() {
-           try {
-               dataLength += columnWriters[i]->write(columnVectors[i], rowBatchSize);
-           } catch (const std::exception& e) {
-               throw std::runtime_error("failed to write column vector: " + std::string(e.what()));
-           }
-       }));
+        std::cout << "Writing column " << i << std::endl;
+
+        futures.emplace_back(std::async(std::launch::async, [this, columnVectors, rowBatchSize, i, &dataLength]() {
+            try {
+                std::cout << "Starting to write column " << i << std::endl;
+                int lengthWritten = columnWriters[i]->write(columnVectors[i], rowBatchSize);
+                dataLength += lengthWritten;
+
+                std::cout << "Finished writing column " << i << ", Length written: " << lengthWritten << std::endl;
+            } catch (const std::exception& e) {
+                std::cerr << "Error while writing column " << i << ": " << e.what() << std::endl;
+                throw std::runtime_error("failed to write column vector: " + std::string(e.what()));
+            }
+        }));
     }
 
-
-    // Wait for all futures to complete
+    // 等待所有任务完成并打印状态
     for (auto& future : futures) {
+        std::cout << "Waiting for future to complete..." << std::endl;
         future.get();  // Blocking until all tasks are completed
+        std::cout << "Future completed." << std::endl;
     }
 
-    // Simulate curRowGroupDataLength accumulation
+    // 模拟 curRowGroupDataLength 累积
     curRowGroupDataLength += dataLength.load();
-    std::cout << "Data length written: " << curRowGroupDataLength << std::endl;
+    std::cout << "Total data length written in this call: " << dataLength.load() << std::endl;
+    std::cout << "Updated curRowGroupDataLength: " << curRowGroupDataLength << std::endl;
 }
+
 
 void PixelsWriterImpl::close(){
     try{

@@ -9,7 +9,7 @@
 #include <string>
 #include <iostream>
 #include "PixelsVersion.h"
-
+#include <cstdint>
 class PixelsFileVersionInvalidException: public std::exception {
 public:
     explicit PixelsFileVersionInvalidException(uint32_t version);

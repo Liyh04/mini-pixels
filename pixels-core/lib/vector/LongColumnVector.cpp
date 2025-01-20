@@ -66,6 +66,7 @@ void * LongColumnVector::current() {
 
 void LongColumnVector::add(std::string &value) {
     std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+    std::cout<<"value="<<value<<std::endl;
     if (value == "true") {
         add(1);
     } else if (value == "false") {
